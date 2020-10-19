@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 
-import asyncio
+import fiona
+import asyncio, math
+import tempfile
+from ftplib import FTP
+from datetime import datetime
+from typing import List
+from numpy.lib.utils import source
 from requests import Response, get
 import xml.etree.cElementTree as ET
 
@@ -14,10 +20,46 @@ headers = {
 
 reps = "https://clerk.house.gov/xml/lists/MemberData.xml"
 senators = "https://www.senate.gov/general/contact_information/senators_cfm.xml"
+cds_path = "geo/tiger/TIGER{}/CD/"
 
 
 async def main():
-    asyncio.gather(fetch_senate(), fetch_house())
+    # await asyncio.gather(fetch_senate(), fetch_house())
+    fetch_cds()
+
+
+def fetch_cds():
+    ftps = FTP("ftp.census.gov")
+    ftps.login()
+    for year, _ in gen_congress():
+        files: List[str] = ftps.nlst(cds_path.format(year))
+        if files:
+            response: Response = get(
+                "https://www2.census.gov/{}".format(files[0]), stream=True
+            )
+
+            tmp = tempfile.TemporaryFile(suffix=".zip")
+            for chunk in response.iter_content():
+                tmp.write(chunk)
+            shapefile_to_json(tmp)
+
+
+def shapefile_to_json(file):
+    with fiona.open(file) as source:
+        with fiona.open(
+            "out.json",
+            "w",
+            driver="GeoJSON",
+            crs=fiona.crs.from_epsg(4326),
+            schema=source.schema,
+        ) as sink:
+            for rec in source:
+                sink.write(rec)
+
+
+def gen_congress(year=datetime.today().year):
+    for i in range(year, 1788, -1):
+        yield (i, math.floor((i + 1) / 2 - 894))
 
 
 async def fetch_house():
@@ -37,8 +79,9 @@ async def fetch_house():
             bioguide = info.find("bioguideID").text
 
             print(
-                "{%s, %s, %s, %s, {%s, %s}}"
-                % (bioguide, fname, lname, party, state, district)
+                "{{{}, {}, {}, {}, {{{}, {}}}".format(
+                    bioguide, fname, lname, party, state, district
+                )
             )
 
             elem.clear()
@@ -59,8 +102,9 @@ async def fetch_senate():
             _class = elem.find("class").text
 
             print(
-                "{%s, %s, %s, %s, {%s, %s}}"
-                % (bioguide, fname, lname, party, state, _class)
+                "{{{}, {}, {}, {}, {{{}, {}}}}}".format(
+                    bioguide, fname, lname, party, state, _class
+                )
             )
 
             elem.clear()
