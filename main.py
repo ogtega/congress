@@ -3,10 +3,10 @@
 import fiona
 import asyncio, math
 import tempfile
+import json
 from ftplib import FTP
 from datetime import datetime
 from typing import List
-from numpy.lib.utils import source
 from requests import Response, get
 import xml.etree.cElementTree as ET
 
@@ -24,42 +24,34 @@ cds_path = "geo/tiger/TIGER{}/CD/"
 
 
 async def main():
-    # await asyncio.gather(fetch_senate(), fetch_house())
-    fetch_cds()
+    await asyncio.gather(fetch_senate(), fetch_house(), fetch_cds())
 
 
 def fetch_cds():
-    ftps = FTP("ftp.census.gov")
-    ftps.login()
-    for year, _ in gen_congress():
-        files: List[str] = ftps.nlst(cds_path.format(year))
+    ftp = FTP("ftp.census.gov")
+    ftp.login()
+    for year, cd in gen_congress():
+        files: List[str] = ftp.nlst(cds_path.format(year))
         if files:
-            response: Response = get(
-                "https://www2.census.gov/{}".format(files[0]), stream=True
+            print(files)
+            response: Response = get("https://www2.census.gov/{}".format(files[0]))
+
+            tmp = tempfile.NamedTemporaryFile(suffix=".zip")
+            tmp.write(response.content)
+            shapefile_to_json(
+                "zip://{}".format(tmp.name), "/tl_{}_us_cd{}.shp".format(year, cd)
             )
-
-            tmp = tempfile.TemporaryFile(suffix=".zip")
-            for chunk in response.iter_content():
-                tmp.write(chunk)
-            shapefile_to_json(tmp)
+            tmp.close()
+            break
 
 
-def shapefile_to_json(file):
-    with fiona.open(file) as source:
-        with fiona.open(
-            "out.json",
-            "w",
-            driver="GeoJSON",
-            crs=fiona.crs.from_epsg(4326),
-            schema=source.schema,
-        ) as sink:
-            for rec in source:
-                sink.write(rec)
-
-
-def gen_congress(year=datetime.today().year):
-    for i in range(year, 1788, -1):
-        yield (i, math.floor((i + 1) / 2 - 894))
+async def shapefile_to_json(file, shape):
+    geojson = {"type": "FeatureCollection", "features": []}
+    with fiona.open(shape, vfs=file) as source:
+        for f in source:
+            geojson["features"].append(f)
+    with open(r"shape.json", "w") as file:
+        json.dump(geojson, file)
 
 
 async def fetch_house():
@@ -108,6 +100,11 @@ async def fetch_senate():
             )
 
             elem.clear()
+
+
+def gen_congress(year=datetime.today().year):
+    for i in range(year, 1788, -1):
+        yield (i, math.floor((i + 1) / 2 - 894))
 
 
 if __name__ == "__main__":
