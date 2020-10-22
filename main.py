@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+import codecs
+import csv
 import json
 import math
 import tempfile
@@ -8,10 +10,11 @@ import xml.etree.cElementTree as ET
 from datetime import datetime
 from ftplib import FTP
 from http.client import HTTPResponse
-from typing import Dict, Generator, IO, List, Tuple
+from typing import IO, Any, Dict, Generator, List, Tuple
 from urllib.request import Request
 
 import fiona
+from fiona.collection import Collection
 
 headers: Dict[str, str] = {
     "User-Agent": (
@@ -25,23 +28,38 @@ headers: Dict[str, str] = {
 def main():
     fetch_senate()
     fetch_house()
+    fetch_statefp()
     fetch_cds()
+
+
+def fetch_statefp() -> Dict[str, Dict[str, str]]:
+    statefp: Dict[str, Dict[str, str]] = dict()
+
+    file = download("https://www2.census.gov/geo/docs/reference/state.txt", headers)
+    reader = csv.DictReader(codecs.iterdecode(file, "utf-8"), delimiter="|")
+
+    for row in reader:
+        fips = row["STATE"]
+        del row["STATE"]
+        statefp.update({fips: row})
+    file.close()
+
+    return statefp
 
 
 def fetch_cds():
     ftp = FTP("ftp.census.gov")
     ftp.login()
+
     for year, _ in gen_congress():
         files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(year))
-        if files:
-            response: HTTPResponse = urllib.request.urlopen(
-                "https://www2.census.gov/{}".format(files[0])
-            )
 
-            tmp = tempfile.NamedTemporaryFile(suffix=".zip")
-            tmp.write(response.read())
-            shapefile_to_json("zip://{}".format(tmp.name))
-            tmp.close()
+        if files:
+            file = download(
+                "https://www2.census.gov/{}".format(files[0]), headers, ".zip"
+            )
+            shapefile_to_json("zip://{}".format(file.name))
+            file.close()
             break
 
 
@@ -50,6 +68,7 @@ def fetch_house():
 
     parser = ET.iterparse(file.name, events=("start", "end"))
 
+    event: str
     elem: ET.Element
     for event, elem in parser:
         if event == "end" and elem.tag == "member":
@@ -79,6 +98,7 @@ def fetch_senate():
 
     parser = ET.iterparse(file.name, events=("start", "end"))
 
+    event: str
     elem: ET.Element
     for event, elem in parser:
         if event == "end" and elem.tag == "member":
@@ -99,13 +119,14 @@ def fetch_senate():
     file.close()
 
 
-def download(url: str, headers: Dict[str, str] = dict()) -> IO[bytes]:
+def download(url: str, headers: Dict[str, str] = dict(), suffix: str = "") -> IO[bytes]:
     request = Request(url)
     request.headers.update(headers)
     response: HTTPResponse = urllib.request.urlopen(request)
 
-    tmp: IO[bytes] = tempfile.NamedTemporaryFile()
+    tmp: IO[bytes] = tempfile.NamedTemporaryFile(suffix=suffix)
     tmp.write(response.read())
+    tmp.seek(0)
 
     return tmp
 
@@ -117,9 +138,13 @@ def gen_congress(year=datetime.today().year) -> Generator[Tuple[int, int], None,
 
 def shapefile_to_json(file):
     geojson = {"type": "FeatureCollection", "features": []}
+
+    source: Collection
     with fiona.open(file) as source:
+        f: Dict[str, Any]
         for f in source:
             geojson["features"].append(f)
+
     with open(r"shape.json", "w") as file:
         json.dump(geojson, file, indent=4)
 
