@@ -26,10 +26,11 @@ headers: Dict[str, str] = {
 
 
 def main():
-    fetch_senate()
-    fetch_house()
     fetch_statefp()
     fetch_cds()
+    fetch_senate()
+    fetch_house()
+    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres)
 
 
 def fetch_statefp() -> Dict[str, Dict[str, str]]:
