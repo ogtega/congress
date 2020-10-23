@@ -30,7 +30,7 @@ def main():
     fetch_cds()
     fetch_senate()
     fetch_house()
-    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres)
+    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres) from https://www.govinfo.gov/bulkdata/BILLSTATUS/116
 
 
 def fetch_statefp() -> Dict[str, Dict[str, str]]:
