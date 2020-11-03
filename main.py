@@ -10,7 +10,7 @@ import xml.etree.cElementTree as ET
 from datetime import datetime
 from ftplib import FTP
 from http.client import HTTPResponse
-from typing import IO, Any, Dict, Generator, List, Tuple
+from typing import IO, Any, Deque, Dict, Generator, List, Tuple
 from urllib.request import Request
 
 import fiona
@@ -26,11 +26,42 @@ headers: Dict[str, str] = {
 
 
 def main():
-    fetch_statefp()
-    fetch_cds()
-    fetch_senate()
-    fetch_house()
-    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres) from https://www.govinfo.gov/bulkdata/BILLSTATUS/116
+    # fetch_statefp()
+    # fetch_cds()
+    # fetch_senate()
+    # fetch_house()
+    fetch_bills()
+    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres) from https://www.govinfo.gov/bulkdata/json/BILLSTATUS/116
+
+
+def fetch_bills():
+    _, cd = next(gen_congress())
+    links = Deque(["https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{}".format(cd)])
+    types = {"hr", "s", "hjres", "sjres"}
+
+    while len(links):
+        link = links.pop()
+
+        if link.endswith((".zip")):
+            print(link)
+            continue
+
+        file = download(
+            link,
+            {
+                "Accept": "application/json",
+                "User-Agent": headers["User-Agent"],
+            },
+        )
+
+        with open(file.name) as f:
+            data = json.load(f)
+            for item in data["files"]:
+                if item["name"] in types:
+                    links.append(item["link"])
+                    continue
+                if not item["folder"] and item["mimeType"] == "application/zip":
+                    links.appendleft(item["link"])
 
 
 def fetch_statefp() -> Dict[str, Dict[str, str]]:
