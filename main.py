@@ -12,6 +12,7 @@ from ftplib import FTP
 from http.client import HTTPResponse
 from typing import IO, Any, Deque, Dict, Generator, List, Tuple
 from urllib.request import Request
+import zipfile
 
 import fiona
 from fiona.collection import Collection
@@ -42,10 +43,6 @@ def fetch_bills():
     while len(links):
         link = links.pop()
 
-        if link.endswith((".zip")):
-            print(link)
-            continue
-
         file = download(
             link,
             {
@@ -53,6 +50,11 @@ def fetch_bills():
                 "User-Agent": headers["User-Agent"],
             },
         )
+
+        if link.endswith(".zip"):
+            bulkdata = zipfile.ZipFile(file, 'r')
+            files = bulkdata.filelist
+            continue
 
         with open(file.name) as f:
             data = json.load(f)
