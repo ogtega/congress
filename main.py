@@ -7,12 +7,12 @@ import math
 import tempfile
 import urllib
 import xml.etree.cElementTree as ET
+import zipfile
 from datetime import datetime
 from ftplib import FTP
 from http.client import HTTPResponse
 from typing import IO, Any, Deque, Dict, Generator, List, Tuple
 from urllib.request import Request
-import zipfile
 
 import fiona
 from fiona.collection import Collection
@@ -27,7 +27,7 @@ headers: Dict[str, str] = {
 
 
 def main():
-    # fetch_statefp()
+    # fetch_states()
     # fetch_cds()
     # fetch_senate()
     # fetch_house()
@@ -52,8 +52,11 @@ def fetch_bills():
         )
 
         if link.endswith(".zip"):
-            bulkdata = zipfile.ZipFile(file, 'r')
+            bulkdata = zipfile.ZipFile(file, "r")
             files = bulkdata.filelist
+
+            for file in files:
+                parse_bill(bulkdata.open(file))
             continue
 
         with open(file.name) as f:
@@ -66,19 +69,29 @@ def fetch_bills():
                     links.appendleft(item["link"])
 
 
-def fetch_statefp() -> Dict[str, Dict[str, str]]:
-    statefp: Dict[str, Dict[str, str]] = dict()
+def parse_bill(file):
+    parser = ET.iterparse(file, events=("start", "end"))
+
+    event: str
+    elem: ET.Element
+    for event, elem in parser:
+        print(elem)
+
+
+def fetch_states() -> List[Dict[str, str]]:
+    states: List[Dict[str, str]] = list()
 
     file = download("https://www2.census.gov/geo/docs/reference/state.txt", headers)
     reader = csv.DictReader(codecs.iterdecode(file, "utf-8"), delimiter="|")
 
     for row in reader:
         fips = row["STATE"]
-        del row["STATE"]
-        statefp.update({fips: row})
+        abrev = row["STUSAB"].lower()
+        name = row["STATE_NAME"]
+        states.append({"_id": abrev, "fips": fips, "name": name})
     file.close()
 
-    return statefp
+    return states
 
 
 def fetch_cds():
@@ -171,13 +184,20 @@ def gen_congress(year=datetime.today().year) -> Generator[Tuple[int, int], None,
 
 
 def shapefile_to_json(file):
-    geojson = {"type": "FeatureCollection", "features": []}
+    geojson = []
 
     source: Collection
     with fiona.open(file) as source:
         f: Dict[str, Any]
         for f in source:
-            geojson["features"].append(f)
+            geojson.append(
+                {
+                    "id": f["properties"]["GEOID"],
+                    "statefp": f["properties"]["STATEFP"],
+                    "district": f["properties"]["GEOID"][-2:],
+                    "geometry": f["geometry"],
+                }
+            )
 
     with open(r"shape.json", "w") as file:
         json.dump(geojson, file, indent=4)
