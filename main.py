@@ -71,12 +71,33 @@ def fetch_bills():
 
 def parse_bill(file):
     bill: Dict[str, str] = dict()
-    parser = ET.iterparse(file, events=("start", "end"))
+    parser = ET.parse(file)
+    root = parser.getroot()
 
-    event: str
-    elem: ET.Element
-    for event, elem in parser:
-        print(elem)
+    billNum = root.find("./bill/billNumber").text
+    billType = root.find("./bill/billType").text.lower()
+    title = root.find("./bill/title").text
+    congress = root.find("./bill/congress").text
+
+    recordedVotes = root.findall("./bill/recordedVotes/recordedVote")
+
+    actions = root.findall("./bill/actions")
+
+    sponsors = root.findall("./bill/sponsors")
+
+    cosponsors = root.findall("./bill/cosponsors")
+
+    tags = root.findall("./bill/subjects/billSubjects//name")
+
+    summaries = root.find("./bill/summaries/billSummaries")
+
+    print(
+        {
+            "id": "{}{}".format(billType, billNum),
+            "congress": congress,
+            "title": title
+        }
+    )
 
 
 def fetch_states() -> List[Dict[str, str]]:
