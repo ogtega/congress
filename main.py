@@ -4,6 +4,7 @@ import codecs
 import csv
 import json
 import math
+import re
 import tempfile
 import urllib
 import xml.etree.cElementTree as ET
@@ -14,7 +15,6 @@ from functools import reduce
 from http.client import HTTPResponse
 from typing import IO, Any, Deque, Dict, Generator, List, Tuple
 from urllib.request import Request
-from datetime import datetime
 
 import fiona
 from fiona.collection import Collection
@@ -26,6 +26,10 @@ headers: Dict[str, str] = {
         "Chrome/39.0.2171.95 Safari/537.36"
     )
 }
+
+senate_vote_pattern = re.compile(
+    "congress=([0-9]+)&session=([0-9])&vote=([0-9]+)$"
+)  # Used to match senate vroll call vote urls
 
 
 def main():
@@ -108,8 +112,26 @@ def parse_bill(file):
                 items = elem.findall("./item/bioguideId")
                 bill["cosponsors"] = list(map(lambda x: x.text, items))
             if elem.tag == "recordedVote":
-                url = elem.find("url")
-                # TODO: Get and parse the voting record
+                url = elem.find("url").text
+                m = senate_vote_pattern.search(url)
+                print(file.name)
+
+                if m:  # Senate roll call votes
+                    congress = m.group(0)
+                    session = m.group(1)
+                    vote = m.group(2)
+
+                    url = "https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{}.xml".format(
+                        congress, session, congress, session, vote
+                    )
+
+                    file = download(url, headers)
+                else:  # House roll call votes
+                    file = download(
+                        url.replace("Votes", "evs"), headers
+                    )  # Need to do this swap to avoid 404s
+
+                # TODO: Methods to parse the votes per chamber ({"id": str, "yea" | "nay" : [bioGuide]})
 
     print(bill)
     return bill
