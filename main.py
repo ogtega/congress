@@ -31,8 +31,8 @@ headers: Dict[str, str] = {
 def main():
     # print(fetch_states())
     # print(fetch_cds())
-    # print(fetch_senate())
-    # print(fetch_house())
+    # print(fetch_senate_members())
+    # print(fetch_house_members())
     fetch_bills()
     # TODO: Get bill status (hr, s) and resolutions (hjres, sjres) from https://www.govinfo.gov/bulkdata/json/BILLSTATUS/116
 
@@ -155,7 +155,7 @@ def fetch_cds():
     return cds
 
 
-def fetch_house():
+def fetch_house_members():
     members: List[Dict[str, str]] = list()
     file = download("https://clerk.house.gov/xml/lists/MemberData.xml", headers)
 
@@ -182,7 +182,7 @@ def fetch_house():
     return members
 
 
-def fetch_senate():
+def fetch_senate_members():
     members: List[Dict[str, str]] = list()
     file = download(
         "https://www.senate.gov/general/contact_information/senators_cfm.xml", headers
