@@ -8,11 +8,13 @@ import tempfile
 import urllib
 import xml.etree.cElementTree as ET
 import zipfile
-from datetime import datetime
+from datetime import date, datetime
 from ftplib import FTP
+from functools import reduce
 from http.client import HTTPResponse
 from typing import IO, Any, Deque, Dict, Generator, List, Tuple
 from urllib.request import Request
+from datetime import datetime
 
 import fiona
 from fiona.collection import Collection
@@ -70,34 +72,38 @@ def fetch_bills():
 
 
 def parse_bill(file):
-    bill: Dict[str, str] = dict()
-    parser = ET.parse(file)
-    root = parser.getroot()
+    bill: Dict[str, Any] = dict()
+    parser = ET.iterparse(file, events=("start", "end"))
 
-    billNum = root.find("./bill/billNumber").text
-    billType = root.find("./bill/billType").text.lower()
-    title = root.find("./bill/title").text
-    congress = root.find("./bill/congress").text
+    event: str
+    elem: ET.Element
+    for event, elem in parser:
+        if event == "end":
+            if elem.tag == "bill":
+                num = elem.find("billNumber").text
+                billType = elem.find("billType").text.lower()
 
-    recordedVotes = root.findall("./bill/recordedVotes/recordedVote")
+                bill["id"] = "{}{}".format(billType, num)
+                bill["title"] = elem.find("title").text
+                bill["congress"] = elem.find("congress").text
+            if elem.tag == "billSubjects":
+                items = elem.findall(".//name")
+                bill["subjects"] = list(map(lambda n: n.text, items))
+            if elem.tag == "billSummaries" and len(elem):
+                datefmt = "%Y-%m-%d"
 
-    actions = root.findall("./bill/actions")
+                summary = reduce(
+                    lambda x, y: x
+                    if datetime.strptime(x.find("actionDate").text, datefmt)
+                    > datetime.strptime(y.find("actionDate").text, datefmt)
+                    else y,
+                    elem,
+                )
 
-    sponsors = root.findall("./bill/sponsors")
+                bill["summary"] = summary.find("text").text
 
-    cosponsors = root.findall("./bill/cosponsors")
-
-    tags = root.findall("./bill/subjects/billSubjects//name")
-
-    summaries = root.find("./bill/summaries/billSummaries")
-
-    print(
-        {
-            "id": "{}{}".format(billType, billNum),
-            "congress": congress,
-            "title": title
-        }
-    )
+    print(bill)
+    return bill
 
 
 def fetch_states() -> List[Dict[str, str]]:
