@@ -101,6 +101,15 @@ def parse_bill(file):
                 )
 
                 bill["summary"] = summary.find("text").text
+            if elem.tag == "sponsors":
+                items = elem.findall("./item/bioguideId")
+                bill["sponsors"] = list(map(lambda x: x.text, items))
+            if elem.tag == "cosponsors" and len(elem):
+                items = elem.findall("./item/bioguideId")
+                bill["cosponsors"] = list(map(lambda x: x.text, items))
+            if elem.tag == "recordedVote":
+                url = elem.find("url")
+                # TODO: Get and parse the voting record
 
     print(bill)
     return bill
