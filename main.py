@@ -9,7 +9,7 @@ import tempfile
 import urllib
 import xml.etree.cElementTree as ET
 import zipfile
-from datetime import date, datetime
+from datetime import datetime
 from ftplib import FTP
 from functools import reduce
 from http.client import HTTPResponse
@@ -33,17 +33,20 @@ senate_vote_pattern = re.compile(
 
 
 def main():
-    # print(fetch_states())
-    # print(fetch_cds())
-    # print(fetch_senate_members())
-    # print(fetch_house_members())
-    fetch_bills()
-    # TODO: Get bill status (hr, s) and resolutions (hjres, sjres) from https://www.govinfo.gov/bulkdata/json/BILLSTATUS/116
+    _, congress = next(gen_congress())
+    fetch_states()
+    fetch_cds()
+    fetch_senate_members()
+    fetch_house_members()
+    fetch_bills(congress)
+    # TODO: Get committee assignments
 
 
-def fetch_bills():
-    _, cd = next(gen_congress())
-    links = Deque(["https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{}".format(cd)])
+def fetch_bills(congress):
+    bills = list()
+    links = Deque(
+        ["https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{}".format(congress)]
+    )
     types = {"hr", "s", "hjres", "sjres"}
 
     while len(links):
@@ -62,7 +65,7 @@ def fetch_bills():
             files = bulkdata.filelist
 
             for file in files:
-                parse_bill(bulkdata.open(file))
+                bills.append(parse_bill(bulkdata.open(file)))
             continue
 
         with open(file.name) as f:
@@ -73,10 +76,11 @@ def fetch_bills():
                     continue
                 if not item["folder"] and item["mimeType"] == "application/zip":
                     links.appendleft(item["link"])
+    return bills
 
 
 def parse_bill(file):
-    bill: Dict[str, Any] = dict()
+    bill: Dict[str, Any] = {"votes": list()}
     parser = ET.iterparse(file, events=("start", "end"))
 
     event: str
@@ -114,27 +118,77 @@ def parse_bill(file):
             if elem.tag == "recordedVote":
                 url = elem.find("url").text
                 m = senate_vote_pattern.search(url)
-                print(file.name)
 
                 if m:  # Senate roll call votes
-                    congress = m.group(0)
-                    session = m.group(1)
-                    vote = m.group(2)
+                    congress = m.group(1)
+                    session = m.group(2)
+                    vote = m.group(3)
 
                     url = "https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{}.xml".format(
                         congress, session, congress, session, vote
                     )
 
                     file = download(url, headers)
+                    bill["votes"].append(parse_votes_senate(file))
                 else:  # House roll call votes
                     file = download(
                         url.replace("Votes", "evs"), headers
                     )  # Need to do this swap to avoid 404s
-
-                # TODO: Methods to parse the votes per chamber ({"id": str, "yea" | "nay" : [bioGuide]})
-
-    print(bill)
+                    bill["votes"].append(parse_votes_house(file))
     return bill
+
+
+def parse_votes_house(file):
+    roll_call: Dict[str, Any] = {
+        "chamber": "h",
+        "yea": list(),
+        "nay": list(),
+        "nv": list(),
+    }
+
+    parser = ET.iterparse(file, events=("start", "end"))
+
+    event: str
+    elem: ET.Element
+    for event, elem in parser:
+        if event == "end" and elem.tag == "recorded-vote":
+            legistlator = elem.find("legislator")
+            bioguide = legistlator.attrib["name-id"]
+            if elem.find("vote").text.lower() == "yea":
+                roll_call["yea"].append(bioguide)
+                continue
+            if elem.find("vote").text.lower() == "nay":
+                roll_call["nay"].append(bioguide)
+                continue
+            roll_call["nv"].append(bioguide)
+
+    return roll_call
+
+
+def parse_votes_senate(file):
+    roll_call: Dict[str, Any] = {
+        "chamber": "s",
+        "yea": list(),
+        "nay": list(),
+        "nv": list(),
+    }
+
+    parser = ET.iterparse(file, events=("start", "end"))
+
+    event: str
+    elem: ET.Element
+    for event, elem in parser:
+        if event == "end" and elem.tag == "member":
+            bioguide = elem.find("lis_member_id").text
+            if elem.find("vote_cast").text.lower() == "yea":
+                roll_call["yea"].append(bioguide)
+                continue
+            if elem.find("vote_cast").text.lower() == "nay":
+                roll_call["nay"].append(bioguide)
+                continue
+            roll_call["nv"].append(bioguide)
+
+    return roll_call
 
 
 def fetch_states() -> List[Dict[str, str]]:
@@ -216,7 +270,7 @@ def fetch_house_members():
 def fetch_senate_members():
     members: List[Dict[str, str]] = list()
     file = download(
-        "https://www.senate.gov/general/contact_information/senators_cfm.xml", headers
+        "https://www.senate.gov/legislative/LIS_MEMBER/cvc_member_data.xml", headers
     )
 
     parser = ET.iterparse(file.name, events=("start", "end"))
@@ -224,15 +278,17 @@ def fetch_senate_members():
     event: str
     elem: ET.Element
     for event, elem in parser:
-        if event == "end" and elem.tag == "member":
+        if event == "end" and elem.tag == "senator":
+            name = elem.find("name")
             members.append(
                 {
-                    "id": elem.find("bioguide_id").text,
-                    "fname": elem.find("first_name").text,
-                    "lname": elem.find("last_name").text,
+                    "id": elem.find("bioguideId").text,
+                    "lis_id": elem.attrib["lis_member_id"],
+                    "fname": name.find("first").text,
+                    "lname": name.find("last").text,
                     "party": elem.find("party").text,
                     "state": elem.find("state").text,
-                    "class": elem.find("class").text,
+                    "class": elem.find("stateRank").text,
                 }
             )
 
