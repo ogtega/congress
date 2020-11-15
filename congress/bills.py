@@ -1,45 +1,18 @@
-#!/usr/bin/env python3
-
-import codecs
-import csv
+import calendar
 import json
-import math
 import re
-import tempfile
-import urllib
+import time
 import xml.etree.cElementTree as ET
 import zipfile
 from datetime import datetime
-from ftplib import FTP
 from functools import reduce
-from http.client import HTTPResponse
-from typing import IO, Any, Deque, Dict, Generator, List, Tuple
-from urllib.request import Request
+from typing import Any, Deque, Dict
 
-import fiona
-from fiona.collection import Collection
-
-headers: Dict[str, str] = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/39.0.2171.95 Safari/537.36"
-    )
-}
+from .utils import download, headers, gen_congress
 
 senate_vote_pattern = re.compile(
     "congress=([0-9]+)&session=([0-9])&vote=([0-9]+)$"
-)  # Used to match senate vroll call vote urls
-
-
-def main():
-    _, congress = next(gen_congress())
-    fetch_states()
-    fetch_cds()
-    fetch_senate_members()
-    fetch_house_members()
-    fetch_bills(congress)
-    # TODO: Get committee assignments
+)  # Used to match senate roll call vote urls
 
 
 def fetch_bills(congress):
@@ -79,6 +52,7 @@ def fetch_bills(congress):
     return bills
 
 
+# https://www.govinfo.gov/bulkdata/BILLSTATUS/resources/BILLSTATUS-XML_User-Guide-v1.pdf
 def parse_bill(file):
     bill: Dict[str, Any] = {"votes": list()}
     parser = ET.iterparse(file, events=("start", "end"))
@@ -118,6 +92,7 @@ def parse_bill(file):
             if elem.tag == "recordedVote":
                 url = elem.find("url").text
                 m = senate_vote_pattern.search(url)
+                votes = {}
 
                 if m:  # Senate roll call votes
                     congress = m.group(1)
@@ -129,12 +104,17 @@ def parse_bill(file):
                     )
 
                     file = download(url, headers)
-                    bill["votes"].append(parse_votes_senate(file))
+                    votes = parse_votes_senate(file)
                 else:  # House roll call votes
                     file = download(
                         url.replace("Votes", "evs"), headers
                     )  # Need to do this swap to avoid 404s
-                    bill["votes"].append(parse_votes_house(file))
+                    votes = parse_votes_house(file)
+                votes["action"] = elem.find("fullActionName").text
+                votes["date"] = calendar.timegm(
+                    time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ")
+                )
+                bill["votes"].append(votes)
     return bill
 
 
@@ -189,129 +169,3 @@ def parse_votes_senate(file):
             roll_call["nv"].append(bioguide)
 
     return roll_call
-
-
-def fetch_states() -> List[Dict[str, str]]:
-    states: List[Dict[str, str]] = list()
-
-    file = download("https://www2.census.gov/geo/docs/reference/state.txt", headers)
-    reader = csv.DictReader(codecs.iterdecode(file, "utf-8"), delimiter="|")
-
-    for row in reader:
-        states.append(
-            {
-                "id": row["STUSAB"].lower(),
-                "fips": row["STATE"],
-                "name": row["STATE_NAME"],
-            }
-        )
-
-    file.close()
-    return states
-
-
-def fetch_cds():
-    cds = list()
-    ftp = FTP("ftp.census.gov")
-    ftp.login()
-
-    for year, _ in gen_congress():
-        files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(year))
-
-        if files:
-            file = download(
-                "https://www2.census.gov/{}".format(files[0]), headers, ".zip"
-            )
-
-            source: Collection
-            with fiona.open("zip://{}".format(file.name)) as source:
-                f: Dict[str, Any]
-                for f in source:
-                    cds.append(
-                        {
-                            "id": f["properties"]["GEOID"],
-                            "statefp": f["properties"]["STATEFP"],
-                            "district": f["properties"]["GEOID"][-2:],
-                            "geometry": f["geometry"],
-                        }
-                    )
-            file.close()
-            break
-    return cds
-
-
-def fetch_house_members():
-    members: List[Dict[str, str]] = list()
-    file = download("https://clerk.house.gov/xml/lists/MemberData.xml", headers)
-
-    parser = ET.iterparse(file.name, events=("start", "end"))
-
-    event: str
-    elem: ET.Element
-    for event, elem in parser:
-        if event == "end" and elem.tag == "member":
-            info = elem.find("member-info")
-
-            members.append(
-                {
-                    "id": info.find("bioguideID").text,
-                    "fname": info.find("firstname").text,
-                    "lname": info.find("lastname").text,
-                    "party": info.find("party").text,
-                    "state": info.find("state").attrib["postal-code"],
-                    "district": elem.find("statedistrict").text,
-                }
-            )
-
-    file.close()
-    return members
-
-
-def fetch_senate_members():
-    members: List[Dict[str, str]] = list()
-    file = download(
-        "https://www.senate.gov/legislative/LIS_MEMBER/cvc_member_data.xml", headers
-    )
-
-    parser = ET.iterparse(file.name, events=("start", "end"))
-
-    event: str
-    elem: ET.Element
-    for event, elem in parser:
-        if event == "end" and elem.tag == "senator":
-            name = elem.find("name")
-            members.append(
-                {
-                    "id": elem.find("bioguideId").text,
-                    "lis_id": elem.attrib["lis_member_id"],
-                    "fname": name.find("first").text,
-                    "lname": name.find("last").text,
-                    "party": elem.find("party").text,
-                    "state": elem.find("state").text,
-                    "class": elem.find("stateRank").text,
-                }
-            )
-
-    file.close()
-    return members
-
-
-def download(url: str, headers: Dict[str, str] = dict(), suffix: str = "") -> IO[bytes]:
-    request = Request(url)
-    request.headers.update(headers)
-    response: HTTPResponse = urllib.request.urlopen(request)
-
-    tmp: IO[bytes] = tempfile.NamedTemporaryFile(suffix=suffix)
-    tmp.write(response.read())
-    tmp.seek(0)
-
-    return tmp
-
-
-def gen_congress(year=datetime.today().year) -> Generator[Tuple[int, int], None, None]:
-    for i in range(year, 1788, -1):
-        yield (i, math.floor((i + 1) / 2 - 894))
-
-
-if __name__ == "__main__":
-    main()
