@@ -1,7 +1,6 @@
 import codecs
 import csv
 from ftplib import FTP
-from functools import lru_cache
 from typing import Any, Dict, List
 
 import fiona
@@ -41,7 +40,6 @@ def fetch_districts():
     return cds
 
 
-@lru_cache()
 def fetch_states() -> Dict[str, str]:
     states: Dict[str, str] = dict()
 
