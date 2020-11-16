@@ -26,8 +26,10 @@ def download(url: str, headers: Dict[str, str] = dict(), suffix: str = "") -> IO
 
     return tmp
 
+
 def get_congress() -> int:
     return next(gen_congress())[1]
+
 
 def gen_congress(year=datetime.today().year) -> Generator[Tuple[int, int], None, None]:
     for i in range(year, 1788, -1):
