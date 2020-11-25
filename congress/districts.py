@@ -9,14 +9,14 @@ from fiona.collection import Collection
 from .utils import download, gen_congress, headers
 
 
-def fetch_districts():
+def fetch_districts() -> List[Dict[str, Any]]:
     cds = list()
     ftp = FTP("ftp.census.gov")
     fp_to_state = fetch_states()
     ftp.login()
 
-    for year, _ in gen_congress():
-        files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(year))
+    for congress in gen_congress():
+        files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(congress.year))
 
         if files:
             file = download(

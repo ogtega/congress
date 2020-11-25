@@ -3,8 +3,18 @@ import tempfile
 import urllib
 from datetime import datetime
 from http.client import HTTPResponse
-from typing import IO, Dict, Generator, Tuple
+from typing import IO, Dict, Generator
 from urllib.request import Request
+
+
+class Congress:
+    number: int
+    year: int
+
+    def __init__(self, num: int, year: int):
+        self.number = num
+        self.year = year
+
 
 headers: Dict[str, str] = {
     "User-Agent": (
@@ -28,9 +38,9 @@ def download(url: str, headers: Dict[str, str] = dict(), suffix: str = "") -> IO
 
 
 def get_congress() -> int:
-    return next(gen_congress())[1]
+    return next(gen_congress()).number
 
 
-def gen_congress(year=datetime.today().year) -> Generator[Tuple[int, int], None, None]:
+def gen_congress(year=datetime.today().year) -> Generator[Congress, None, None]:
     for i in range(year, 1788, -1):
-        yield (i, math.floor((i + 1) / 2 - 894))
+        yield Congress(math.floor((i + 1) / 2 - 894), i)
