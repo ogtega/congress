@@ -8,14 +8,14 @@ from datetime import datetime
 from functools import reduce
 from typing import Any, Deque, Dict
 
-from .utils import download, headers
+from .utils import download, get_congress, headers
 
 senate_vote_pattern = re.compile(
     "congress=([0-9]+)&session=([0-9])&vote=([0-9]+)$"
 )  # Used to match senate roll call vote urls
 
 
-def fetch_bills(congress):
+def fetch_bills(congress: int = get_congress()):
     bills = list()
     links = Deque(
         ["https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{}".format(congress)]

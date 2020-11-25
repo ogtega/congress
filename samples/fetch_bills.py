@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 
 import json
+import os
 
-from congress import fetch_bills, get_congress
+from congress import fetch_bills
 
 
 def main():
-    congress = get_congress()
-    with open("bills.json", "w") as f:
-        json.dump(fetch_bills(congress), f, indent=4, sort_keys=True)
+    bills = fetch_bills()
+
+    for bill in bills:
+        fname = f"bills/{bill['id']}.json"
+        os.makedirs(os.path.dirname(fname), exist_ok=True)
+        with open(fname, "w") as f:
+            json.dump(bill, f, indent=4, sort_keys=True)
 
 
 if __name__ == "__main__":

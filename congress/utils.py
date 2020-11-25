@@ -2,18 +2,25 @@ import math
 import tempfile
 import urllib
 from datetime import datetime
+from html.parser import HTMLParser
 from http.client import HTTPResponse
-from typing import IO, Dict, Generator
+from io import StringIO
+from typing import IO, Dict
 from urllib.request import Request
 
 
-class Congress:
-    number: int
-    year: int
+class HTMLStripper(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.reset()
+        self.strict = False
+        self.text = StringIO()
 
-    def __init__(self, num: int, year: int):
-        self.number = num
-        self.year = year
+    def handle_data(self, d):
+        self.text.write(d)
+
+    def get_data(self):
+        return self.text.getvalue()
 
 
 headers: Dict[str, str] = {
@@ -37,10 +44,5 @@ def download(url: str, headers: Dict[str, str] = dict(), suffix: str = "") -> IO
     return tmp
 
 
-def get_congress() -> int:
-    return next(gen_congress()).number
-
-
-def gen_congress(year=datetime.today().year) -> Generator[Congress, None, None]:
-    for i in range(year, 1788, -1):
-        yield Congress(math.floor((i + 1) / 2 - 894), i)
+def get_congress(year=datetime.today().year) -> int:
+    return math.floor((year + 1) / 2 - 894)

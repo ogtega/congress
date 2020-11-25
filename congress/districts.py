@@ -1,22 +1,23 @@
 import codecs
 import csv
+from datetime import datetime
 from ftplib import FTP
 from typing import Any, Dict, List
 
 import fiona
 from fiona.collection import Collection
 
-from .utils import download, gen_congress, headers
+from .utils import download, headers
 
 
-def fetch_districts() -> List[Dict[str, Any]]:
+def fetch_districts(year: int = datetime.today().year) -> List[Dict[str, Any]]:
     cds = list()
     ftp = FTP("ftp.census.gov")
     fp_to_state = fetch_states()
     ftp.login()
 
-    for congress in gen_congress():
-        files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(congress.year))
+    for i in range(year, 1992, -1):
+        files: List[str] = ftp.nlst("geo/tiger/TIGER{}/CD/".format(i))
 
         if files:
             file = download(
