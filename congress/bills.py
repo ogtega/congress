@@ -86,7 +86,7 @@ def parse_bill(file):
 def get_summary(elem: ET.Element):
     datefmt = "%Y-%m-%d"
 
-    summary = reduce(
+    summary: ET.Element = reduce(
         lambda x, y, fmt=datefmt: x
         if datetime.strptime(x.find("actionDate").text, fmt)
         > datetime.strptime(y.find("actionDate").text, fmt)
@@ -123,6 +123,8 @@ def get_votes(elem: ET.Element):
         time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ")
     )
 
+    return votes
+
 
 def parse_votes_house(file):
     roll_call: Dict[str, Any] = {
@@ -140,10 +142,10 @@ def parse_votes_house(file):
         if event == "end" and elem.tag == "recorded-vote":
             legistlator = elem.find("legislator")
             bioguide = legistlator.attrib.get("name-id").lower()
-            if elem.find("vote").text.lower() == "yea":
+            if elem.find("vote").text.lower() in ["aye", "yea"]:
                 roll_call["yea"].append(bioguide)
                 continue
-            if elem.find("vote").text.lower() == "nay":
+            if elem.find("vote").text.lower() in ["nay", "no"]:
                 roll_call["nay"].append(bioguide)
                 continue
             roll_call["nv"].append(bioguide)
