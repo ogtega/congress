@@ -6,18 +6,19 @@ from congress import fetch_house, fetch_senate
 
 
 def main():
+    house = fetch_house()
+    senate = fetch_senate()
+
     with open("house.json", "w") as f:
-        data = fetch_house()
         json.dump(
-            {"members": data.members, "committees": data.committees},
+            {"members": house.members, "committees": house.committees},
             f,
             indent=4,
             sort_keys=True,
         )
     with open("senate.json", "w") as f:
-        data = fetch_senate()
         json.dump(
-            {"members": data.members, "committees": data.committees},
+            {"members": senate.members, "committees": senate.committees},
             f,
             indent=4,
             sort_keys=True,
