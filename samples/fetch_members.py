@@ -6,8 +6,8 @@ from congress import fetch_house, fetch_senate
 
 
 def main():
-    house = fetch_house()
     senate = fetch_senate()
+    house = fetch_house()
 
     with open("house.json", "w") as f:
         json.dump(

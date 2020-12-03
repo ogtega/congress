@@ -5,8 +5,9 @@ from .utils import download, headers
 
 
 class MemberData:
-    members: List[Dict[str, Any]] = list()
-    committees: List[Dict[str, str]] = list()
+    def __init__(self):
+        self.members: List[Dict[str, Any]] = list()
+        self.committees: List[Dict[str, str]] = list()
 
 
 def fetch_senate() -> MemberData:
