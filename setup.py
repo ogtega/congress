@@ -19,5 +19,6 @@ setup(
     author_email="tolunlade@outlook.com",
     url="https://github.com/ogtega/polist_congress",
     license=license,
+    install_requires=['Fiona==1.8.17'],
     packages=find_packages(exclude=("tests", "samples")),
 )
