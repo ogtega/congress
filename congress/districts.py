@@ -10,7 +10,15 @@ from fiona.collection import Collection
 from .utils import download, headers
 
 
-def fetch_districts(year: int = datetime.today().year) -> List[Dict[str, Any]]:
+class District:
+    def __init__(self, id: str, state: str, district: str, geometry: Dict) -> None:
+        self.id = id
+        self.state = state
+        self.district = district
+        self.geometry = geometry
+
+
+def fetch_districts(year: int = datetime.today().year) -> List[District]:
     cds = list()
     ftp = FTP("ftp.census.gov")
     fp_to_state = fetch_states()
@@ -28,13 +36,14 @@ def fetch_districts(year: int = datetime.today().year) -> List[Dict[str, Any]]:
             with fiona.open("zip://{}".format(file.name)) as source:
                 f: Dict[str, Any]
                 for f in source:
+                    cd = f["properties"]["CDSESSN"]
                     cds.append(
-                        {
-                            "id": f["properties"]["GEOID"],
-                            "state": fp_to_state[f["properties"]["STATEFP"]],
-                            "district": f["properties"]["GEOID"][-2:],
-                            "geometry": f["geometry"],
-                        }
+                        District(
+                            f["properties"]["GEOID"],
+                            fp_to_state[f["properties"]["STATEFP"]],
+                            f["properties"][f"CD{cd}FP"],
+                            f["geometry"],
+                        )
                     )
             file.close()
             break

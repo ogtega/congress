@@ -1,17 +1,49 @@
 import xml.etree.cElementTree as ET
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
 
 from .utils import download, headers
 
 
-class MemberData:
-    def __init__(self):
-        self.members: List[Dict[str, Any]] = list()
-        self.committees: List[Dict[str, str]] = list()
+class Committee:
+    def __init__(self, id: str, name: str) -> None:
+        self.id = id
+        self.name = name
 
 
-def fetch_senate() -> MemberData:
-    res = MemberData()
+class Member:
+    def __init__(
+        self,
+        id: str,
+        fname: str,
+        lname: str,
+        party: str,
+        state: str,
+        srank: Optional[str] = None,
+        district: Optional[str] = None,
+        lisid: Optional[str] = None,
+        committees: List[str] = list(),
+    ) -> None:
+        self.id = id
+        self.fname = fname
+        self.lname = lname
+        self.party = party
+        self.state = state
+        self.srank = srank
+        self.district = district
+        self.lisid = lisid
+        self.committees = committees
+
+
+class ChamberData:
+    def __init__(
+        self, members: List[Member] = list(), committees: List[Committee] = list()
+    ):
+        self.members = members
+        self.committees = committees
+
+
+def fetch_senate() -> ChamberData:
+    res = ChamberData()
     committee_set: Set[str] = set()
 
     file = download(
@@ -26,39 +58,35 @@ def fetch_senate() -> MemberData:
         if event == "end" and elem.tag == "senator":
             name = elem.find("name")
             assignments = elem.find("committees")
+            comcodes = list()
 
             for assignment in assignments:
                 code = assignment.attrib.get("code")
-                if code in committee_set:
+                if code in committee_set or not len(code):
                     continue
 
-                res.committees.append({"id": code.lower(), "name": assignment.text})
+                res.committees.append(Committee(code.lower(), assignment.text))
                 committee_set.add(code)
+                comcodes.append(code)
 
             res.members.append(
-                {
-                    "id": elem.find("bioguideId").text,
-                    "lis_id": elem.attrib.get("lis_member_id", None),
-                    "fname": name.find("first").text,
-                    "lname": name.find("last").text,
-                    "party": elem.find("party").text,
-                    "state": elem.find("state").text,
-                    "class": elem.find("stateRank").text,
-                    "committees": list(
-                        filter(
-                            lambda x: len(x),
-                            map(lambda x: x.attrib.get("code").lower(), assignments),
-                        )
-                    ),
-                }
+                Member(
+                    elem.find("bioguideId").text,
+                    name.find("first").text,
+                    name.find("last").text,
+                    elem.find("party").text,
+                    elem.find("state").text,
+                    elem.find("stateRank").text,
+                    committees=comcodes,
+                )
             )
 
     file.close()
     return res
 
 
-def fetch_house() -> MemberData:
-    res = MemberData()
+def fetch_house() -> ChamberData:
+    res = ChamberData()
 
     file = download("https://clerk.house.gov/xml/lists/MemberData.xml", headers)
 
@@ -74,35 +102,36 @@ def fetch_house() -> MemberData:
             assignments = elem.find("committee-assignments")
 
             res.members.append(
-                {
-                    "id": info.find("bioguideID").text,
-                    "fname": info.find("firstname").text,
-                    "lname": info.find("lastname").text,
-                    "party": info.find("party").text,
-                    "state": info.find("state").attrib.get("postal-code"),
-                    "district": elem.find("statedistrict").text,
-                    "committees": list(
+                Member(
+                    info.find("bioguideID").text,
+                    info.find("firstname").text,
+                    info.find("lastname").text,
+                    info.find("party").text,
+                    info.find("state").attrib.get("postal-code"),
+                    district=elem.find("statedistrict").text,
+                    committees=list(
                         filter(
                             lambda x: len(x) > 1,
                             map(lambda x: f"h{get_house_comcode(x)}", assignments),
                         )
                     ),
-                }
+                )
             )
         if elem.tag == "committees":
             for committee in elem:
                 res.committees.append(
-                    {
-                        "id": "h" + get_house_comcode(committee),
-                        "name": committee.find(f"{committee.tag}-fullname").text,
-                    }
+                    Committee(
+                        ("j" if committee.attrib.get("type") == "joint" else "h")
+                        + get_house_comcode(committee),
+                        committee.find(f"{committee.tag}-fullname").text,
+                    )
                 )
 
     file.close()
     return res
 
 
-def get_house_comcode(elem: ET.Element):
+def get_house_comcode(elem: ET.Element) -> str:
     return str.lower(
         elem.attrib.get(f"{elem.tag[:-6]}code", "")
     )  # Gets either com or subcom from r"(com|subcom)mitte" the tag name

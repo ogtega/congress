@@ -11,14 +11,42 @@ def main():
 
     with open("house.json", "w") as f:
         json.dump(
-            {"members": house.members, "committees": house.committees},
+            {
+                "members": list(
+                    map(
+                        lambda m: (
+                            m.id,
+                            f"{m.fname} {m.lname}",
+                            m.party,
+                            m.state,
+                            m.committees,
+                        ),
+                        house.members,
+                    )
+                ),
+                "committees": list(map(lambda c: (c.id, c.name), house.committees)),
+            },
             f,
             indent=4,
             sort_keys=True,
         )
     with open("senate.json", "w") as f:
         json.dump(
-            {"members": senate.members, "committees": senate.committees},
+            {
+                "members": list(
+                    map(
+                        lambda m: (
+                            m.id,
+                            f"{m.fname} {m.lname}",
+                            m.party,
+                            m.state,
+                            m.committees,
+                        ),
+                        senate.members,
+                    )
+                ),
+                "committees": list(map(lambda c: (c.id, c.name), senate.committees)),
+            },
             f,
             indent=4,
             sort_keys=True,

@@ -6,7 +6,7 @@ import xml.etree.cElementTree as ET
 import zipfile
 from datetime import datetime
 from functools import reduce
-from typing import Any, Deque, Dict
+from typing import Any, Deque, Dict, List
 
 from .utils import download, get_congress, headers
 
@@ -15,7 +15,47 @@ senate_vote_pattern = re.compile(
 )  # Used to match senate roll call vote urls
 
 
-def fetch_bills(congress: int = get_congress()):
+class Vote:
+    def __init__(
+        self,
+        chamber: str,
+        action: str,
+        date: int,
+        yeas: List[str] = list(),
+        nays: List[str] = list(),
+        nv: List[str] = list(),
+    ) -> None:
+        self.chamber = chamber
+        self.action = action
+        self.date = date
+        self.yeas = yeas
+        self.nays = nays
+        self.nv = nv
+
+
+class Bill:
+    def __init__(
+        self,
+        id: str = "",
+        title: str = "",
+        congress: int = "",
+        summary: str = "",
+        subjects: List[str] = list(),
+        sponsors: List[str] = list(),
+        cosponsors: List[str] = list(),
+        votes: List[Vote] = list(),
+    ) -> None:
+        self.id = id
+        self.title = title
+        self.congress = congress
+        self.subjects = subjects
+        self.summary = summary
+        self.sponsors = sponsors
+        self.cosponsors = cosponsors
+        self.votes = votes
+
+
+def fetch_bills(congress: int = get_congress()) -> List[Bill]:
     bills = list()
     links = Deque(
         ["https://www.govinfo.gov/bulkdata/json/BILLSTATUS/{}".format(congress)]
@@ -52,9 +92,9 @@ def fetch_bills(congress: int = get_congress()):
     return bills
 
 
-# https://www.govinfo.gov/bulkdata/BILLSTATUS/resources/BILLSTATUS-XML_User-Guide-v1.pdf
-def parse_bill(file):
-    bill: Dict[str, Any] = {"votes": list()}
+# https://github.com/usgpo/bill-status/blob/master/BILLSTATUS-XML_User_User-Guide.md
+def parse_bill(file) -> Bill:
+    bill: Bill = Bill()
     parser = ET.iterparse(file, events=("start", "end"))
 
     event: str
@@ -67,19 +107,22 @@ def parse_bill(file):
             num = elem.find("billNumber").text
             bill_type = elem.find("billType").text.lower()
 
-            bill["id"] = f"{bill_type}{num}"
-            bill["title"] = elem.find("title").text
-            bill["congress"] = int(elem.find("congress").text)
+            bill.id = f"{bill_type}{num}"
+            bill.title = elem.find("title").text
+            bill.congress = int(elem.find("congress").text)
         if elem.tag == "billSubjects":
             items = elem.findall(".//name")
-            bill["subjects"] = list(map(lambda n: n.text.lower(), items))
+            bill.subjects = list(map(lambda n: n.text.lower(), items))
         if elem.tag == "billSummaries" and len(elem):
-            bill["summary"] = get_summary(elem)
+            bill.summary = get_summary(elem)
         if elem.tag == "sponsors" or elem.tag == "cosponsors":
             items = elem.findall("./item/bioguideId")
-            bill[elem.tag] = list(map(lambda x: x.text.lower(), items))
+            if elem.tag == "sponsors":
+                bill.sponsors = list(map(lambda x: x.text.lower(), items))
+            else:
+                bill.cosponsors = list(map(lambda x: x.text.lower(), items))
         if elem.tag == "recordedVote":
-            bill["votes"].append(get_votes(elem))
+            bill.votes.append(get_vote(elem))
     return bill
 
 
@@ -97,43 +140,36 @@ def get_summary(elem: ET.Element):
     return summary.find("text").text
 
 
-def get_votes(elem: ET.Element):
+def get_vote(elem: ET.Element) -> Vote:
     url = elem.find("url").text
     m = senate_vote_pattern.search(url)
-    votes = {}
+
+    action = elem.find("fullActionName").text
+    date = calendar.timegm(time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ"))
+
+    vote: Vote
 
     if m:  # Senate roll call votes
         congress = m.group(1)
         session = m.group(2)
-        vote = m.group(3)
+        num = m.group(3)
 
         url = "https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{}.xml".format(
-            congress, session, congress, session, vote
+            congress, session, congress, session, num
         )
 
         file = download(url, headers)
-        votes = parse_votes_senate(file)
+        vote = parse_votes_senate(Vote("s", action, date), file)
     else:  # House roll call votes
         file = download(
             url.replace("Votes", "evs"), headers
         )  # Need to do this swap to avoid 404s
-        votes = parse_votes_house(file)
-    votes["action"] = elem.find("fullActionName").text
-    votes["date"] = calendar.timegm(
-        time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ")
-    )
+        vote = parse_votes_house(Vote("h", action, date), file)
 
-    return votes
+    return vote
 
 
-def parse_votes_house(file):
-    roll_call: Dict[str, Any] = {
-        "chamber": "h",
-        "yea": list(),
-        "nay": list(),
-        "nv": list(),
-    }
-
+def parse_votes_house(vote: Vote, file) -> Vote:
     parser = ET.iterparse(file, events=("start", "end"))
 
     event: str
@@ -143,24 +179,17 @@ def parse_votes_house(file):
             legistlator = elem.find("legislator")
             bioguide = legistlator.attrib.get("name-id").lower()
             if elem.find("vote").text.lower() in ["aye", "yea"]:
-                roll_call["yea"].append(bioguide)
+                vote.yeas.append(bioguide)
                 continue
             if elem.find("vote").text.lower() in ["nay", "no"]:
-                roll_call["nay"].append(bioguide)
+                vote.nays.append(bioguide)
                 continue
-            roll_call["nv"].append(bioguide)
+            vote.nv.append(bioguide)
 
-    return roll_call
+    return vote
 
 
-def parse_votes_senate(file):
-    roll_call: Dict[str, Any] = {
-        "chamber": "s",
-        "yea": list(),
-        "nay": list(),
-        "nv": list(),
-    }
-
+def parse_votes_senate(vote: Vote, file) -> Vote:
     parser = ET.iterparse(file, events=("start", "end"))
 
     event: str
@@ -169,11 +198,11 @@ def parse_votes_senate(file):
         if event == "end" and elem.tag == "member":
             bioguide = elem.find("lis_member_id").text.lower()
             if elem.find("vote_cast").text.lower() == "yea":
-                roll_call["yea"].append(bioguide)
+                vote.yeas.append(bioguide)
                 continue
             if elem.find("vote_cast").text.lower() == "nay":
-                roll_call["nay"].append(bioguide)
+                vote.nays.append(bioguide)
                 continue
-            roll_call["nv"].append(bioguide)
+            vote.nv.append(bioguide)
 
-    return roll_call
+    return vote
