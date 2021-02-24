@@ -34,7 +34,7 @@ class Member:
         self.committees = committees
 
 
-class ChamberData:
+class MemberData:
     def __init__(
         self, members: List[Member] = list(), committees: List[Committee] = list()
     ):
@@ -42,8 +42,8 @@ class ChamberData:
         self.committees = committees
 
 
-def fetch_senate() -> ChamberData:
-    res = ChamberData()
+def fetch_senate() -> MemberData:
+    res = MemberData()
     committee_set: Set[str] = set()
 
     file = download(
@@ -85,8 +85,8 @@ def fetch_senate() -> ChamberData:
     return res
 
 
-def fetch_house() -> ChamberData:
-    res = ChamberData()
+def fetch_house() -> MemberData:
+    res = MemberData()
 
     file = download("https://clerk.house.gov/xml/lists/MemberData.xml", headers)
 
