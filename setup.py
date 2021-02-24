@@ -12,7 +12,7 @@ with open("LICENSE") as f:
 
 setup(
     name="polist_congress",
-    version="0.1.0",
+    version="0.1.1",
     description="",
     long_description=readme,
     author="Teslim Olunlade",
