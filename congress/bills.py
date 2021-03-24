@@ -6,7 +6,7 @@ import xml.etree.cElementTree as ET
 import zipfile
 from datetime import datetime
 from functools import reduce
-from typing import Any, Deque, Dict, List
+from typing import Deque, List
 
 from .utils import download, get_congress, headers
 
@@ -16,21 +16,13 @@ senate_vote_pattern = re.compile(
 
 
 class Vote:
-    def __init__(
-        self,
-        chamber: str,
-        action: str,
-        date: int,
-        yeas: List[str] = list(),
-        nays: List[str] = list(),
-        nv: List[str] = list(),
-    ) -> None:
+    def __init__(self, chamber: str, action: str, date: int) -> None:
         self.chamber = chamber
         self.action = action
         self.date = date
-        self.yeas = yeas
-        self.nays = nays
-        self.nv = nv
+        self.yeas = list()
+        self.nays = list()
+        self.nv = list()
 
 
 class Bill:
@@ -147,8 +139,6 @@ def get_vote(elem: ET.Element) -> Vote:
     action = elem.find("fullActionName").text
     date = calendar.timegm(time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ"))
 
-    vote: Vote = Vote("s" if m else "h", action, date)
-
     if m:  # Senate roll call votes
         congress = m.group(1)
         session = m.group(2)
@@ -159,18 +149,17 @@ def get_vote(elem: ET.Element) -> Vote:
         )
 
         file = download(url, headers)
-        parse_votes_senate(vote, file)
+        return parse_votes_senate(action, date, file)
     else:  # House roll call votes
         file = download(
             url.replace("Votes", "evs"), headers
         )  # Need to do this swap to avoid 404s
-        parse_votes_house(vote, file)
-
-    return vote
+        return parse_votes_house(action, date, file)
 
 
-def parse_votes_house(vote: Vote, file) -> Vote:
+def parse_votes_house(action: str, date: int, file) -> Vote:
     parser = ET.iterparse(file, events=("start", "end"))
+    vote: Vote = Vote("h", action, date)
 
     event: str
     elem: ET.Element
@@ -186,9 +175,12 @@ def parse_votes_house(vote: Vote, file) -> Vote:
                 continue
             vote.nv.append(bioguide)
 
+    return vote
 
-def parse_votes_senate(vote: Vote, file) -> Vote:
+
+def parse_votes_senate(action: str, date: int, file) -> Vote:
     parser = ET.iterparse(file, events=("start", "end"))
+    vote: Vote = Vote("s", action, date)
 
     event: str
     elem: ET.Element
@@ -202,3 +194,5 @@ def parse_votes_senate(vote: Vote, file) -> Vote:
                 vote.nays.append(bioguide)
                 continue
             vote.nv.append(bioguide)
+
+    return vote
