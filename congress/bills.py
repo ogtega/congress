@@ -147,7 +147,7 @@ def get_vote(elem: ET.Element) -> Vote:
     action = elem.find("fullActionName").text
     date = calendar.timegm(time.strptime(elem.find("date").text, "%Y-%m-%dT%H:%M:%SZ"))
 
-    vote: Vote
+    vote: Vote = Vote("s" if m else "h", action, date)
 
     if m:  # Senate roll call votes
         congress = m.group(1)
@@ -159,12 +159,12 @@ def get_vote(elem: ET.Element) -> Vote:
         )
 
         file = download(url, headers)
-        vote = parse_votes_senate(Vote("s", action, date), file)
+        parse_votes_senate(vote, file)
     else:  # House roll call votes
         file = download(
             url.replace("Votes", "evs"), headers
         )  # Need to do this swap to avoid 404s
-        vote = parse_votes_house(Vote("h", action, date), file)
+        parse_votes_house(vote, file)
 
     return vote
 
@@ -186,8 +186,6 @@ def parse_votes_house(vote: Vote, file) -> Vote:
                 continue
             vote.nv.append(bioguide)
 
-    return vote
-
 
 def parse_votes_senate(vote: Vote, file) -> Vote:
     parser = ET.iterparse(file, events=("start", "end"))
@@ -204,5 +202,3 @@ def parse_votes_senate(vote: Vote, file) -> Vote:
                 vote.nays.append(bioguide)
                 continue
             vote.nv.append(bioguide)
-
-    return vote

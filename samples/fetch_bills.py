@@ -9,9 +9,17 @@ from congress import fetch_bills
 def main():
     bills = fetch_bills()
 
-    for bill in bills:
+    for bill in bills[:1]:
         fname = f"bills/{bill.id}.json"
         os.makedirs(os.path.dirname(fname), exist_ok=True)
+
+        votes = list(
+            map(
+                lambda x: {"yeas": len(x.yeas), "nays": len(x.nays), "nv": len(x.nv)},
+                bill.votes,
+            )
+        )
+
         with open(fname, "w") as f:
             json.dump(
                 {
@@ -22,6 +30,7 @@ def main():
                     "subjects": bill.subjects,
                     "sponsors": bill.sponsors,
                     "cosponsors": bill.cosponsors,
+                    "votes": votes,
                 },
                 f,
                 indent=4,
