@@ -16,35 +16,43 @@ senate_vote_pattern = re.compile(
 
 
 class Vote:
-    def __init__(self, chamber: str, action: str, date: int) -> None:
+    def __init__(
+        self,
+        chamber: str = None,
+        action: str = None,
+        date: int = None,
+        yeas: List[str] = None,
+        nays: List[str] = None,
+        nv: List[str] = None,
+    ) -> None:
         self.chamber = chamber
         self.action = action
         self.date = date
-        self.yeas = list()
-        self.nays = list()
-        self.nv = list()
+        self.yeas = yeas or list()
+        self.nays = nays or list()
+        self.nv = nv or list()
 
 
 class Bill:
     def __init__(
         self,
-        id: str = "",
-        title: str = "",
-        congress: int = "",
-        summary: str = "",
-        subjects: List[str] = list(),
-        sponsors: List[str] = list(),
-        cosponsors: List[str] = list(),
-        votes: List[Vote] = list(),
+        id: str = None,
+        title: str = None,
+        congress: int = None,
+        summary: str = None,
+        subjects: List[str] = None,
+        sponsors: List[str] = None,
+        cosponsors: List[str] = None,
+        votes: List[Vote] = None,
     ) -> None:
-        self.id = id
-        self.title = title
-        self.congress = congress
-        self.subjects = subjects
-        self.summary = summary
-        self.sponsors = sponsors
-        self.cosponsors = cosponsors
-        self.votes = votes
+        self.id = id or ""
+        self.title = title or ""
+        self.congress = congress or get_congress()
+        self.subjects = subjects or list()
+        self.summary = summary or ""
+        self.sponsors = sponsors or list()
+        self.cosponsors = cosponsors or list()
+        self.votes = votes or list()
 
 
 def fetch_bills(congress: int = get_congress()) -> List[Bill]:
