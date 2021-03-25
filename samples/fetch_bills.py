@@ -9,7 +9,7 @@ from congress import fetch_bills
 def main():
     bills = fetch_bills()
 
-    for bill in bills[:1]:
+    for bill in bills:
         fname = f"bills/{bill.id}.json"
         os.makedirs(os.path.dirname(fname), exist_ok=True)
 
