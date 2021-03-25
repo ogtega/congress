@@ -19,16 +19,16 @@ class Vote:
     def __init__(
         self,
         chamber: str = None,
-        number: int = None,
         action: str = None,
         date: int = None,
+        number: int = None,
         yeas: List[str] = None,
         nays: List[str] = None,
         nv: List[str] = None,
     ) -> None:
         self.chamber = chamber
-        self.number = number
         self.action = action
+        self.number = number
         self.date = date
         self.yeas = yeas or list()
         self.nays = nays or list()
