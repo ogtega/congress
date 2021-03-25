@@ -15,7 +15,7 @@ def main():
 
         votes = list(
             map(
-                lambda x: {"yeas": len(x.yeas), "nays": len(x.nays), "nv": len(x.nv)},
+                lambda x: {"id": f"{bill.id}_{x.number}", "yeas": len(x.yeas), "nays": len(x.nays), "nv": len(x.nv)},
                 bill.votes,
             )
         )

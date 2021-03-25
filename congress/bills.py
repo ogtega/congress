@@ -19,6 +19,7 @@ class Vote:
     def __init__(
         self,
         chamber: str = None,
+        number: int = None,
         action: str = None,
         date: int = None,
         yeas: List[str] = None,
@@ -26,6 +27,7 @@ class Vote:
         nv: List[str] = None,
     ) -> None:
         self.chamber = chamber
+        self.number = number
         self.action = action
         self.date = date
         self.yeas = yeas or list()
@@ -182,6 +184,8 @@ def parse_votes_house(action: str, date: int, file) -> Vote:
                 vote.nays.append(bioguide)
                 continue
             vote.nv.append(bioguide)
+        if event == "end" and elem.tag == "rollcall-num":
+            vote.number = int(elem.text)
 
     return vote
 
@@ -202,5 +206,7 @@ def parse_votes_senate(action: str, date: int, file) -> Vote:
                 vote.nays.append(bioguide)
                 continue
             vote.nv.append(bioguide)
+        if event == "end" and elem.tag == "vote_number":
+            vote.number = int(elem.text)
 
     return vote
